@@ -1,0 +1,229 @@
+---
+title: "Untitled"
+author: "Sateesh"
+date: "3/23/2020"
+output: pdf_document
+---
+```{r}
+if(!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse,readxl,shiny,ggplot2,lubridate,shinydashboard,shiny,DT,plotly,rworldmap)
+```
+#Reading the Data
+```{r}
+ebola <- read.csv('ebola_2014_2016.csv')
+ebola$Date<- as.Date(as.character(ebola$Date),format = "%m/%d/%Y")
+```
+#Data wrangling
+
+##Removing the duplicate records of same day and from same country
+```{r}
+ebola1 <- ebola %>% group_by(ebola$Country,ebola$Date) %>% summarise(max(No..of.suspected.cases),max(No..of.probable.cases),max(No..of.confirmed.cases),max(No..of.confirmed..probable.and.suspected.cases),max(No..of.suspected.deaths),max(No..of.probable.deaths),max(No..of.confirmed.deaths),max(No..of.confirmed..probable.and.suspected.deaths))
+```
+```{r}
+ebola1 <- data.frame(ebola1)
+names(ebola1) <- names(ebola)
+```
+```{r}
+ebola <- ebola1
+```
+
+```{r}
+ebola[order(ebola$Country,ebola$Date),]
+```
+#Parameters to be passed to the input controls
+```{r}
+parameters <- colnames(ebola)
+parameters <- parameters[c(3:10)]
+```
+
+1.Daily increase of cases for each country:
+
+```{r}
+ggplot(data = ebola[!is.na(ebola$No..of.confirmed.deaths)& ebola$Country == "Guinea",],aes(Date,No..of.confirmed.deaths))+
+  geom_point()+
+  geom_line()
+```
+2. Finding average number of cases each month for every country.
+```{r}
+df <- ebola
+df$month <- months(ebola$Date)
+df$year <- year(ebola$Date)
+df$month <- factor(df$month ,levels = c("January","February","March","April","May","June","July","August","September","October","November","December"))
+df$year <- factor(df$year)
+```
+
+```{r}
+str(df)
+```
+
+```{r}
+df <- df %>% group_by(df$Country,df$month,df$year) %>% summarise(mean(No..of.suspected.cases),mean(No..of.probable.cases),mean(No..of.confirmed.cases),mean(No..of.confirmed..probable.and.suspected.cases),mean(No..of.suspected.deaths),mean(No..of.probable.deaths),mean(No..of.confirmed.deaths),mean(No..of.confirmed..probable.and.suspected.deaths))
+df <- data.frame(df)
+```
+```{r}
+names <- colnames(ebola)
+colnames(df) <- c("Country","Month","Year",names[3:10])
+df[,4:11]<- round(df[,4:11],0)
+```
+
+# Monthly increase graph
+```{r}
+ggplot(data = df[!is.na(df$No..of.confirmed.deaths) & df$Country == "Guinea" ,] , aes(x = Month , y = No..of.confirmed.deaths , group = 1))+
+  geom_point()+
+  geom_line()+
+  facet_wrap(~Year)+
+  theme(axis.text.x=element_text(size=8, angle=90))
+```
+## Position of each country at the end of the month
+```{r}
+df1 <- df %>% group_by(df$Country,df$Month,df$Year) %>% summarise(max(No..of.confirmed.cases),max(No..of.confirmed..probable.and.suspected.cases),max(No..of.confirmed.deaths),max(No..of.confirmed..probable.and.suspected.deaths))
+df1 <- data.frame(df1)
+str(df1)
+```
+Cumulative number of cases
+```{r}
+df1 <- df1[,c(1,2,3,5,7)]
+names(df1) <- c("Country","Month","Year","Cumulative cases","Cumulative deaths")
+df1[,c(4,5)] <- round(df1[,c(4,5)])
+```
+## Adding Country Codes to plot world map
+```{r}
+df2 <- data.frame("Country" = c("Liberia","United States of America","Guinea","Italy","Mali","Nigeria","Senegal","Sierra Leone","Spain","United Kingdom"),"ISO3V10" = c("LBR","USA","GIN","ITA","MLI","NGA","SEN","SLE","ESP","GBR"))
+
+df3 <- df1 %>% left_join(df2,by = "Country")
+```
+
+Shiny Dashboard # Daily cases graph & Number of cases and death after each month
+
+```{r}
+ui <- dashboardPage(
+  dashboardHeader(title = "Ebola cases"),
+  dashboardSidebar(sidebarMenu(
+      menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
+      menuItem("Cases on World Map", tabName = "widgets", icon = icon("th"))
+    )),
+  dashboardBody(
+    tabItems(
+      # First tab content
+      tabItem(tabName = "dashboard",
+    fluidRow(
+      box(
+        plotlyOutput("plot1",height = 300)
+      ),
+      box(
+        title = "Controls",
+         div(style = 'overflow-y: scroll', 
+        selectInput(inputId = "country",
+                             label = "Country",
+                             choices = ebola$Country,
+                             selected = ""
+                             
+                 ),
+        selectInput(inputId = "parameter",
+                             label = "Parameter",
+                             choices = parameters,
+                             selected = ""
+                             
+                 ),
+        selectInput(inputId = "month",
+                             label = "Month",
+                             choices = df1$Month,
+                             selected = ""
+                             
+                 ),
+        selectInput(inputId = "year",
+                             label = "Year",
+                             choices = df1$Year,
+                             selected = ""
+                             
+                 )
+        
+        
+      )),
+       box(
+        #div(style = 'overflow-x: scroll', tableOutput('table1')),
+        dataTableOutput("table1")
+      ),
+      box(
+        plotlyOutput("plot2")
+      )
+      
+    )
+  ),
+  tabItem(tabName = "widgets",
+          h2("World wide cases"),
+    fluidRow(
+      box(
+        plotOutput("plot5")),
+        box(
+        title = "Controls",
+         div(style = 'overflow-y: scroll', 
+        selectInput(inputId = "month1",
+                             label = "Month",
+                             choices = df3$Month,
+                             selected = ""
+                             
+                 ),
+        selectInput(inputId = "year1",
+                             label = "Year",
+                             choices = df3$Year,
+                             selected = ""
+                             
+                 ),
+        selectInput(inputId = "parameter1",
+                             label = "Parameter",
+                             choices = c("Cumulative cases","Cumulative deaths"),
+                             selected = ""
+                             
+                 )
+        
+        
+      )
+      )
+    )
+  )
+
+  
+  
+  )
+   
+
+)
+)
+
+server <- function(input, output) {
+ output$plot1 <- renderPlotly(
+    ggplot(data = ebola[ !is.na(input$parameter)&ebola$Country == input$country,],aes(x = Date))+
+      aes_string(y = input$parameter)+
+      geom_point()+
+      geom_line()+
+      ggtitle("Daily Increase in cases of selected country in selected year")+
+      ylab("No of Cases")
+  )
+  output$table1 <- DT::renderDataTable(
+  df1[df1$Month == input$month & df1$Year == input$year ,] %>% arrange(desc(`Cumulative cases`)) %>% select(-Month,-Year),
+  caption = "Position of each country at Selected Month and Year"
+  )
+  output$plot2 <- renderPlotly(
+    ggplot(data = df[!is.na(input$parameter)&df$Country == input$country & df$Year == input$year,],aes(x = Month))+
+      aes_string(y = input$parameter)+
+      geom_bar(stat = "identity", fill = "cyan")+
+      ggtitle("Monthly Average cases of selected Country in selected Year")+
+      ylab("No of cases")+
+      theme(plot.title = element_text(size = 10, face = "bold"))
+  )
+ sPDF <- reactive(joinCountryData2Map(df3[df3$Year == input$year1 & df3$Month == input$month1,]
+              , joinCode = "ISO3"
+              , nameJoinColumn = "ISO3V10"
+     ))
+  output$plot5 <- renderPlot(
+    mapParams <- mapPolys(sPDF()
+              , nameColumnToPlot=input$parameter1 ,catMethod="fixedWidth" , missingCountryCol	
+= 'darkgrey' , mapTitle = input$parameter1
+              )
+  )
+}
+
+shinyApp(ui, server)
+```
+
