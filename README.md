@@ -8,5 +8,3 @@ It includes data pre processing steps, UI and back end code.
 Also we have ebola data visualised on World map in R Shiny.
 
 
-![GitHub Logo](/images/logo.png)
-Format: ![Alt Text](C:\Users\satee\Desktop\Untitled.png)
